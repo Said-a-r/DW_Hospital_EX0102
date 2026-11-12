@@ -2,15 +2,131 @@
 	"name": "df_silver_diagnoses",
 	"properties": {
 		"folder": {
-			"name": "Silver"
+			"name": "silver"
 		},
 		"type": "MappingDataFlow",
 		"typeProperties": {
-			"sources": [],
-			"sinks": [],
-			"transformations": [],
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_bronze_diagnoses",
+						"type": "DatasetReference"
+					},
+					"name": "source1"
+				},
+				{
+					"dataset": {
+						"referenceName": "ds_silver_admissions",
+						"type": "DatasetReference"
+					},
+					"name": "sourceAdmissions"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_silver_diagnoses",
+						"type": "DatasetReference"
+					},
+					"name": "sink1"
+				}
+			],
+			"transformations": [
+				{
+					"name": "selectAdmissions"
+				},
+				{
+					"name": "derivedColumn1"
+				},
+				{
+					"name": "derivedColumn2"
+				},
+				{
+					"name": "derivedColumn3"
+				},
+				{
+					"name": "derivedColumn4"
+				},
+				{
+					"name": "derivedColumn5"
+				},
+				{
+					"name": "filterValidos"
+				},
+				{
+					"name": "derivedColumn6"
+				},
+				{
+					"name": "existsAdmisiones"
+				}
+			],
 			"scriptLines": [
-				""
+				"source(output(",
+				"          diagnosis_id as string,",
+				"          admission_id as string,",
+				"          icd_code as string,",
+				"          diagnosis_description as string,",
+				"          severity as string",
+				"     ),",
+				"     allowSchemaDrift: false,",
+				"     validateSchema: true,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     format: 'table') ~> source1",
+				"source(output(",
+				"          admission_id as integer",
+				"     ),",
+				"     allowSchemaDrift: false,",
+				"     validateSchema: true,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     format: 'table') ~> sourceAdmissions",
+				"sourceAdmissions select(mapColumn(",
+				"          admission_id_silver = admission_id",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> selectAdmissions",
+				"source1 derive(diagnosis_id = trim(diagnosis_id),",
+				"          admission_id = trim(admission_id),",
+				"          icd_code = upper(trim(icd_code)),",
+				"          diagnosis_description = trim(diagnosis_description),",
+				"          severity = trim(severity)) ~> derivedColumn1",
+				"derivedColumn1 derive(icd_code = regexReplace(regexReplace(icd_code, `\\s*,\\s*`, ', '), `\\s+`, ' ')) ~> derivedColumn2",
+				"derivedColumn2 derive(icd_code = regexReplace(regexReplace(regexReplace(regexReplace(icd_code, `S72[.-]?001A`, 'S72.001A'), `C50[.-]?911`, 'C50.911'), `J45[.-]?909`, 'J45.909'), `M54[.-]?5`, 'M54.5')) ~> derivedColumn3",
+				"derivedColumn3 derive(icd_code = regexReplace(regexReplace(regexReplace(regexReplace(icd_code, `N39[.-]?0`, 'N39.0'), `E11[.-]?9`, 'E11.9'), `K21[.-]?9`, 'K21.9'), `F32[.-]?9`, 'F32.9')) ~> derivedColumn4",
+				"derivedColumn4 derive(severity = iif(isNull(severity) || severity == '', toString(null()), iif(upper(severity) == 'MILD', 'Mild', iif(upper(severity) == 'MODERATE', 'Moderate', iif(upper(severity) == 'SEVERE', 'Severe', iif(upper(severity) == 'CRITICAL', 'Critical', severity)))))) ~> derivedColumn5",
+				"derivedColumn5 filter(!isNull(diagnosis_id) && isInteger(diagnosis_id) && toLong(diagnosis_id) >= 1 && toLong(diagnosis_id) <= 2147483647 &&",
+				"     !isNull(admission_id) && isInteger(admission_id) && toLong(admission_id) >= 1 && toLong(admission_id) <= 2147483647 &&",
+				"     !isNull(icd_code) && icd_code != '' && length(icd_code) <= 50 &&",
+				"     (isNull(diagnosis_description) || length(diagnosis_description) <= 500) &&",
+				"     (isNull(severity) || length(severity) <= 50)) ~> filterValidos",
+				"filterValidos derive(diagnosis_id = toInteger(diagnosis_id),",
+				"          admission_id = toInteger(admission_id)) ~> derivedColumn6",
+				"derivedColumn6, selectAdmissions exists(admission_id == admission_id_silver,",
+				"     negate:false,",
+				"     broadcast: 'auto')~> existsAdmisiones",
+				"existsAdmisiones sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          diagnosis_id as integer,",
+				"          admission_id as integer,",
+				"          icd_code as string,",
+				"          diagnosis_description as string,",
+				"          severity as string",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'stopOnFirstError',",
+				"     mapColumn(",
+				"          diagnosis_id,",
+				"          admission_id,",
+				"          icd_code,",
+				"          diagnosis_description,",
+				"          severity",
+				"     )) ~> sink1"
 			]
 		}
 	}

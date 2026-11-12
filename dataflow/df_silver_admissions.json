@@ -48,6 +48,9 @@
 					"name": "derivedColumn4"
 				},
 				{
+					"name": "selectPatients"
+				},
+				{
 					"name": "existsPacientes"
 				}
 			],
@@ -65,7 +68,14 @@
 				"     isolationLevel: 'READ_UNCOMMITTED',",
 				"     format: 'table') ~> source1",
 				"source(output(",
-				"          patient_id as integer",
+				"          patient_id as integer,",
+				"          full_name as string,",
+				"          gender as string,",
+				"          date_of_birth as date,",
+				"          phone as string,",
+				"          email as string,",
+				"          address as string,",
+				"          insurance_provider as string",
 				"     ),",
 				"     allowSchemaDrift: false,",
 				"     validateSchema: true,",
@@ -91,7 +101,12 @@
 				"          discharge_date = iif(isNull(discharge_date) || !isDate(discharge_date, 'yyyy-MM-dd'), toDate(null()), toDate(discharge_date, 'yyyy-MM-dd')),",
 				"          attending_doctor_id = toInteger(attending_doctor_id)) ~> derivedColumn3",
 				"derivedColumn3 derive(discharge_date = iif(!isNull(discharge_date) && discharge_date < admission_date, toDate(null()), discharge_date)) ~> derivedColumn4",
-				"derivedColumn4, sourcePatients exists(derivedColumn4@patient_id == sourcePatients@patient_id,",
+				"sourcePatients select(mapColumn(",
+				"          patient_id_silver = patient_id",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> selectPatients",
+				"derivedColumn4, selectPatients exists(patient_id == patient_id_silver,",
 				"     negate:false,",
 				"     broadcast: 'auto')~> existsPacientes",
 				"existsPacientes sink(allowSchemaDrift: true,",

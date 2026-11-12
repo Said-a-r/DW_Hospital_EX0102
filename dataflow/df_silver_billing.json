@@ -2,15 +2,138 @@
 	"name": "df_silver_billing",
 	"properties": {
 		"folder": {
-			"name": "Silver"
+			"name": "silver"
 		},
 		"type": "MappingDataFlow",
 		"typeProperties": {
-			"sources": [],
-			"sinks": [],
-			"transformations": [],
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_bronze_billing",
+						"type": "DatasetReference"
+					},
+					"name": "source1"
+				},
+				{
+					"dataset": {
+						"referenceName": "ds_silver_admissions",
+						"type": "DatasetReference"
+					},
+					"name": "sourceAdmissions"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_silver_billing",
+						"type": "DatasetReference"
+					},
+					"name": "sink1"
+				}
+			],
+			"transformations": [
+				{
+					"name": "selectAdmissions"
+				},
+				{
+					"name": "derivedColumn1"
+				},
+				{
+					"name": "derivedColumn2"
+				},
+				{
+					"name": "derivedColumn3"
+				},
+				{
+					"name": "filterValidos"
+				},
+				{
+					"name": "derivedColumn4"
+				},
+				{
+					"name": "derivedColumn5"
+				},
+				{
+					"name": "existsAdmisiones"
+				}
+			],
 			"scriptLines": [
-				""
+				"source(output(",
+				"          billing_id as string,",
+				"          admission_id as string,",
+				"          charge_type as string,",
+				"          amount as string,",
+				"          payment_status as string,",
+				"          payment_date as string",
+				"     ),",
+				"     allowSchemaDrift: false,",
+				"     validateSchema: true,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     format: 'table') ~> source1",
+				"source(output(",
+				"          admission_id as integer",
+				"     ),",
+				"     allowSchemaDrift: false,",
+				"     validateSchema: true,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     format: 'table') ~> sourceAdmissions",
+				"sourceAdmissions select(mapColumn(",
+				"          admission_id_silver = admission_id",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> selectAdmissions",
+				"source1 derive(billing_id = trim(billing_id),",
+				"          admission_id = trim(admission_id),",
+				"          charge_type = trim(charge_type),",
+				"          amount = trim(amount),",
+				"          payment_status = trim(payment_status),",
+				"          payment_date = trim(payment_date)) ~> derivedColumn1",
+				"derivedColumn1 derive(charge_type = iif(isNull(charge_type) || charge_type == '', 'Unspecified', charge_type),",
+				"          payment_status = iif(upper(payment_status) == 'PAID', 'Paid', iif(upper(payment_status) == 'UNPAID', 'Unpaid', iif(upper(payment_status) == 'PENDING', 'Pending', iif(upper(payment_status) == 'OVERDUE', 'Overdue', payment_status))))) ~> derivedColumn2",
+				"derivedColumn2 derive(amount = trim(replace(replace(replace(upper(amount), 'USD', ''), '$', ''), ',', ''))) ~> derivedColumn3",
+				"derivedColumn3 filter(!isNull(billing_id) && isInteger(billing_id) && toLong(billing_id) >= 1 && toLong(billing_id) <= 2147483647 &&",
+				"     !isNull(admission_id) && isInteger(admission_id) && toLong(admission_id) >= 1 && toLong(admission_id) <= 2147483647 &&",
+				"     !isNull(charge_type) && charge_type != '' && length(charge_type) <= 100 &&",
+				"     !isNull(amount) && amount != '' && regexMatch(amount, `^-?[0-9]{1,10}(\\.[0-9]+)?$`) && isDecimal(amount) &&",
+				"     !isNull(payment_status) && payment_status != '' && length(payment_status) <= 50) ~> filterValidos",
+				"filterValidos derive(billing_id = toInteger(billing_id),",
+				"          admission_id = toInteger(admission_id),",
+				"          amount = toDecimal(amount, 12, 2)) ~> derivedColumn4",
+				"derivedColumn4 derive(payment_date = iif(isNull(payment_date) || payment_date == '', toDate(null()),",
+				"         iif(regexMatch(payment_date, `^[0-9]{4}-[0-9]{2}-[0-9]{2}$`), toDate(payment_date, 'yyyy-MM-dd'),",
+				"         iif(regexMatch(payment_date, `^[0-9]{2}/[0-9]{2}/[0-9]{4}$`), toDate(payment_date, 'MM/dd/yyyy'),",
+				"         iif(regexMatch(payment_date, `^[0-9]{2}-[A-Za-z]{3}-[0-9]{4}$`), toDate(payment_date, 'dd-MMM-yyyy'),",
+				"         iif(regexMatch(payment_date, `^[A-Za-z]+ [0-9]{2}, [0-9]{4}$`), toDate(payment_date, 'MMMM dd, yyyy'),",
+				"         iif(regexMatch(payment_date, `^[0-9]{2}-[0-9]{2}-2[3-6]$`), toDate(concat('20', substring(payment_date, 7, 2), '-', substring(payment_date, 1, 2), '-', substring(payment_date, 4, 2)), 'yyyy-MM-dd'), toDate(null())))))))) ~> derivedColumn5",
+				"derivedColumn5, selectAdmissions exists(admission_id == admission_id_silver,",
+				"     negate:false,",
+				"     broadcast: 'auto')~> existsAdmisiones",
+				"existsAdmisiones sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     input(",
+				"          billing_id as integer,",
+				"          admission_id as integer,",
+				"          charge_type as string,",
+				"          amount as decimal(12,2),",
+				"          payment_status as string,",
+				"          payment_date as date",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'stopOnFirstError',",
+				"     mapColumn(",
+				"          billing_id,",
+				"          admission_id,",
+				"          charge_type,",
+				"          amount,",
+				"          payment_status,",
+				"          payment_date",
+				"     )) ~> sink1"
 			]
 		}
 	}
