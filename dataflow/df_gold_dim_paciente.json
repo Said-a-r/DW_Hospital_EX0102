@@ -1,0 +1,93 @@
+{
+	"name": "df_gold_dim_paciente",
+	"properties": {
+		"folder": {
+			"name": "gold"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_silver_patients",
+						"type": "DatasetReference"
+					},
+					"name": "source1"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_gold_dim_paciente",
+						"type": "DatasetReference"
+					},
+					"name": "sink1"
+				}
+			],
+			"transformations": [
+				{
+					"name": "derivedColumn1"
+				},
+				{
+					"name": "derivedColumn2"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          patient_id as integer,",
+				"          full_name as string,",
+				"          gender as string,",
+				"          date_of_birth as date,",
+				"          email as string,",
+				"          address as string,",
+				"          insurance_provider as string",
+				"     ),",
+				"     allowSchemaDrift: false,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT patient_id, full_name, gender, date_of_birth, email, address, insurance_provider FROM silver.patients',",
+				"     format: 'query') ~> source1",
+				"source1 derive(edad = iif(isNull(date_of_birth) || date_of_birth > currentDate(), 0, year(currentDate()) - year(date_of_birth) - iif(month(currentDate()) < month(date_of_birth) || (month(currentDate()) == month(date_of_birth) && dayOfMonth(currentDate()) < dayOfMonth(date_of_birth)), 1, 0))) ~> derivedColumn1",
+				"derivedColumn1 derive(patient_id_bk = patient_id,",
+				"          nombre_completo = full_name,",
+				"          genero = iif(isNull(gender) || trim(gender) == '', 'Desconocido', iif(upper(trim(gender)) == 'MALE', 'Masculino', iif(upper(trim(gender)) == 'FEMALE', 'Femenino', 'Desconocido'))),",
+				"          fecha_nacimiento = date_of_birth,",
+				"          rango_etario = iif(isNull(date_of_birth) || date_of_birth > currentDate(), toString(null()), iif(edad <= 18, '0-18', iif(edad <= 35, '19-35', iif(edad <= 60, '36-60', '60+')))),",
+				"          correo_electronico = email,",
+				"          direccion = address,",
+				"          proveedor_seguro = iif(isNull(insurance_provider) || trim(insurance_provider) == '', 'No especificado', insurance_provider)) ~> derivedColumn2",
+				"derivedColumn2 sink(allowSchemaDrift: false,",
+				"     validateSchema: false,",
+				"     input(",
+				"          paciente_key as integer,",
+				"          patient_id_bk as integer,",
+				"          nombre_completo as string,",
+				"          genero as string,",
+				"          fecha_nacimiento as date,",
+				"          rango_etario as string,",
+				"          correo_electronico as string,",
+				"          direccion as string,",
+				"          proveedor_seguro as string",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'stopOnFirstError',",
+				"     mapColumn(",
+				"          patient_id_bk,",
+				"          nombre_completo,",
+				"          genero,",
+				"          fecha_nacimiento,",
+				"          rango_etario,",
+				"          correo_electronico,",
+				"          direccion,",
+				"          proveedor_seguro",
+				"     )) ~> sink1"
+			]
+		}
+	}
+}
