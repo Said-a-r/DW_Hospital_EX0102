@@ -1,0 +1,102 @@
+{
+	"name": "df_gold_dim_fecha",
+	"properties": {
+		"folder": {
+			"name": "gold"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_silver_admissions",
+						"type": "DatasetReference"
+					},
+					"name": "source1"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_gold_dim_fecha",
+						"type": "DatasetReference"
+					},
+					"name": "sink1"
+				}
+			],
+			"transformations": [
+				{
+					"name": "derivedColumn1"
+				},
+				{
+					"name": "derivedColumn2"
+				},
+				{
+					"name": "derivedColumn3"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          fecha_completa as date",
+				"     ),",
+				"     allowSchemaDrift: false,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT admission_date AS fecha_completa FROM silver.admissions WHERE admission_date IS NOT NULL UNION SELECT discharge_date AS fecha_completa FROM silver.admissions WHERE discharge_date IS NOT NULL UNION SELECT payment_date AS fecha_completa FROM silver.billing WHERE payment_date IS NOT NULL',",
+				"     format: 'query') ~> source1",
+				"source1 derive(fecha_key = toInteger(toString(fecha_completa, 'yyyyMMdd')),",
+				"          anio = year(fecha_completa),",
+				"          trimestre = iif(month(fecha_completa) <= 3, 1, iif(month(fecha_completa) <= 6, 2, iif(month(fecha_completa) <= 9, 3, 4))),",
+				"          mes = month(fecha_completa),",
+				"          semana_anio = weekOfYear(fecha_completa),",
+				"          dia_mes = dayOfMonth(fecha_completa),",
+				"          dia_semana = iif(dayOfWeek(fecha_completa) == 1, 7, dayOfWeek(fecha_completa) - 1)) ~> derivedColumn1",
+				"derivedColumn1 derive(mes_nombre = iif(mes == 1, 'Enero', iif(mes == 2, 'Febrero', iif(mes == 3, 'Marzo', iif(mes == 4, 'Abril', iif(mes == 5, 'Mayo', iif(mes == 6, 'Junio', iif(mes == 7, 'Julio', iif(mes == 8, 'Agosto', iif(mes == 9, 'Septiembre', iif(mes == 10, 'Octubre', iif(mes == 11, 'Noviembre', 'Diciembre'))))))))))),",
+				"          dia_nombre = iif(dia_semana == 1, 'Lunes', iif(dia_semana == 2, 'Martes', iif(dia_semana == 3, 'Miercoles', iif(dia_semana == 4, 'Jueves', iif(dia_semana == 5, 'Viernes', iif(dia_semana == 6, 'Sabado', 'Domingo'))))))) ~> derivedColumn2",
+				"derivedColumn2 derive(trimestre_nombre = concat('T', toString(trimestre)),",
+				"          mes_corto = substring(mes_nombre, 1, 3),",
+				"          es_fin_de_semana = dia_semana >= 6) ~> derivedColumn3",
+				"derivedColumn3 sink(allowSchemaDrift: false,",
+				"     validateSchema: false,",
+				"     input(",
+				"          fecha_key as integer,",
+				"          fecha_completa as date,",
+				"          anio as integer,",
+				"          trimestre as integer,",
+				"          trimestre_nombre as string,",
+				"          mes as integer,",
+				"          mes_nombre as string,",
+				"          mes_corto as string,",
+				"          semana_anio as integer,",
+				"          dia_mes as integer,",
+				"          dia_semana as integer,",
+				"          dia_nombre as string,",
+				"          es_fin_de_semana as boolean",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'stopOnFirstError',",
+				"     mapColumn(",
+				"          fecha_key,",
+				"          fecha_completa,",
+				"          anio,",
+				"          trimestre,",
+				"          trimestre_nombre,",
+				"          mes,",
+				"          mes_nombre,",
+				"          mes_corto,",
+				"          semana_anio,",
+				"          dia_mes,",
+				"          dia_semana,",
+				"          dia_nombre,",
+				"          es_fin_de_semana",
+				"     )) ~> sink1"
+			]
+		}
+	}
+}
