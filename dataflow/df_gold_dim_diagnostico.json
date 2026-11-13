@@ -6,11 +6,64 @@
 		},
 		"type": "MappingDataFlow",
 		"typeProperties": {
-			"sources": [],
-			"sinks": [],
-			"transformations": [],
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "ds_silver_diagnoses",
+						"type": "DatasetReference"
+					},
+					"name": "source1",
+					"description": "."
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_gold_dim_diagnostico",
+						"type": "DatasetReference"
+					},
+					"name": "sink1"
+				}
+			],
+			"transformations": [
+				{
+					"name": "derivedColumn1",
+					"description": "."
+				}
+			],
 			"scriptLines": [
-				""
+				"source(output(",
+				"          codigo_icd as string,",
+				"          descripcion_patologia as string,",
+				"          nivel_severidad as string",
+				"     ),",
+				"     allowSchemaDrift: false,",
+				"     validateSchema: false,",
+				"     isolationLevel: 'READ_UNCOMMITTED',",
+				"     query: 'SELECT DISTINCT icd_code AS codigo_icd, diagnosis_description AS descripcion_patologia, severity AS nivel_severidad FROM silver.diagnoses WHERE icd_code IS NOT NULL AND LEN(LTRIM(RTRIM(icd_code))) > 0',",
+				"     format: 'query') ~> source1",
+				"source1 derive(nivel_severidad = iif(isNull(nivel_severidad) || trim(nivel_severidad) == '', 'No especificada', nivel_severidad)) ~> derivedColumn1",
+				"derivedColumn1 sink(allowSchemaDrift: false,",
+				"     validateSchema: false,",
+				"     input(",
+				"          diagnostico_key as integer,",
+				"          codigo_icd as string,",
+				"          descripcion_patologia as string,",
+				"          nivel_severidad as string",
+				"     ),",
+				"     deletable:false,",
+				"     insertable:true,",
+				"     updateable:false,",
+				"     upsertable:false,",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'stopOnFirstError',",
+				"     mapColumn(",
+				"          codigo_icd,",
+				"          descripcion_patologia,",
+				"          nivel_severidad",
+				"     )) ~> sink1"
 			]
 		}
 	}
